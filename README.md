@@ -7,11 +7,11 @@ perspective.
 
 <p float="left">
   <img src="/img/framework.jpg" width="400" />
-  <img src="/img/result2.png" width="400" />
+
   <img src="/img/result3.png" width="400" />
 </p>
 
-<!-- ## Viusal results on WDC dataset with 90% missing
-![image](https://github.com/ZhengJianwei2/WHGL/blob/main/img/02Original-39_WHGL.png)
-## The spectral and spatial consistency on WDC data under 90% missing rate.
+## Viusal results on WDC dataset with 90% missing
+![image](https://github.com/ZhengJianwei2/SFANet/img/result2.png)
+<!-- ## The spectral and spatial consistency on WDC data under 90% missing rate.
 ![image](https://github.com/ZhengJianwei2/WHGL/blob/main/img/10SMF_125-28WHGL_b40.png) -->
