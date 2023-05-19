@@ -14,4 +14,4 @@ perspective.
 <!-- ## Viusal results on WDC dataset with 90% missing
 ![image](https://github.com/ZhengJianwei2/SFANet/img/result2.png)
 <!-- ## The spectral and spatial consistency on WDC data under 90% missing rate.
-![image](https://github.com/ZhengJianwei2/WHGL/blob/main/img/10SMF_125-28WHGL_b40.png) --> -->
+![image](https://github.com/ZhengJianwei2/WHGL/blob/main/img/10SMF_125-28WHGL_b40.png) -->
