@@ -7,8 +7,8 @@ perspective.
 
 <p float="left">
   <img src="/img/framework.jpg" width="400" />
-
-  <img src="/img/result3.png" width="400" />
+  <img src="/img/result2.jpg" width="400" />
+  <img src="/img/result3.jpg" width="400" />
 </p>
 
 ## Viusal results on WDC dataset with 90% missing
