@@ -1,5 +1,5 @@
 # SFANet
-This is the introduction of our paper "ORSI Salient Object Detection via Hierarchically Progressive Semantic Flow and Lightweight Interaction-attention", currently submitting to TGRS. The code will be released soon. If you have any questions, please feel free to contact us："qyq@zjut.edu.cn" or "zjw@zjut.edu.cn"
+This is the introduction of our paper "ORSI Salient Object Detection via Progressive Semantic Flow and Uncertainty-aware Refinement", currently submitting to TGRS. The code will be released soon. If you have any questions, please feel free to contact us："qyq@zjut.edu.cn" or "zjw@zjut.edu.cn"
 ## Highlight 
 * To obtain feature maps with rich semantic information and critical object locations, two individual modules, namely semantic extraction module (SEM) and interscale fusion module (IFM), are meticulously designed that efficiently extract and merge semantic flow from a global
 perspective.
