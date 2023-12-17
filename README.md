@@ -6,7 +6,7 @@ perspective.
 * A lightweight interaction-attention module (LIAM) is proposed, which is specifically designed to suppress task-irrelevant information, highlighting the meaningful objects and enriching the representation of details in low-level features of saliency maps. 
 
 <p float="left">
-  <img src="/img/framework.jpg" width="800" />
+  <img src="/img/SFANet.png" width="800" />
   <img src="/img/result2.jpg" width="800" />
   <img src="/img/result3.jpg" width="800" />
 </p>
