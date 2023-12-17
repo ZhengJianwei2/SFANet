@@ -7,8 +7,8 @@ perspective.
 
 <p float="left">
   <img src="/img/SFANet.png" width="800" />
-  <img src="/img/result2.jpg" width="800" />
-  <img src="/img/result3.jpg" width="800" />
+  <img src="/img/result1.png" width="800" />
+  <img src="/img/result2.png" width="800" />
 </p>
 
 <!-- ## Viusal results on WDC dataset with 90% missing
