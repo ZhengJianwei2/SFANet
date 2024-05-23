@@ -7,11 +7,17 @@ In this paper, we propose SFANet, a new model for salient object detection in re
   <img src="/img/SFANet.png" width="800" />
 </p>
 
+## Requirements
+python 3.8 + pytorch 1.9.0
+
 ## Saliency maps
 We provide [saliency maps](https://pan.baidu.com/s/1OspaxsovAgyFyin0hLpO-A) (code: qyqq) on ORSSD, EORSSD, and ORSI4199 datasets. In addition, we also provide [measure results (.mat)](https://pan.baidu.com/s/1Mo5xzyAN7gx8VBjliVsWbg) (code: qyqq) on the three datasets.
 <p float="left">
   <img src="/img/result1.png" width="800" />
 </p> 
+
+## Training
+Download [res2net50_v1b_26w_4s.pth](https://pan.baidu.com/s/1RaIQsonhrMKesGNh6enVcA) (code: qyqq), and put it in './pre/'.
 
 ## Evaluation Tool
 You can use the [evaluation tool (MATLAB version)](https://github.com/MathLee/MatlabEvaluationTools) to evaluate the above saliency maps.
