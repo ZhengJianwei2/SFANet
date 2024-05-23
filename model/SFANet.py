@@ -1,5 +1,4 @@
 import torch.nn.functional as F
-from model.Res import resnet18
 from model.Res2Net_v1b import res2net50_v1b_26w_4s
 from torch_geometric.nn import BatchNorm, global_max_pool
 from model.graphbatch import Generate_edges_globally, graph_batch_re_trans
@@ -67,6 +66,7 @@ class ChannelAttention(nn.Module):
         out = max_out
         return self.sigmoid(out)
 
+
 class SpatialAttention(nn.Module):
     def __init__(self, kernel_size=7):
         super(SpatialAttention, self).__init__()
@@ -103,7 +103,19 @@ class URM(nn.Module):
         self.cbr = convbnrelu(cur_channel * 4, cur_channel, 1)
 
     def forward(self, x):
-        #  The code will be open source soon
+        # Edge attention
+        x_edge_ca = x.mul(self.ca_edge(self.conv_edge(x)))
+        x_edge = x_edge_ca.mul(self.sa_edge(x_edge_ca))
+        x_fg_ca = x.mul(self.ca_fg(self.conv_fg(x)))
+        x_fg = x_fg_ca.mul(self.sa_fg(x_fg_ca))
+        x_fg_edge = self.FE_conv(x_fg + x_edge)
+
+        x_7 = self.conv7(x_fg_edge)
+        x_5 = self.conv5(x_7 + x_fg_edge)
+        x_3 = self.conv3(x_5 + x_fg_edge)
+        x_1 = self.conv1(x_3 + x_fg_edge)
+
+        x_define = self.cbr(torch.cat((x_1, x_3, x_5, x_7), 1))
 
         return x_define, x_edge
 
@@ -118,7 +130,11 @@ class SEM(nn.Module):
         self.conv_atten = nn.Conv2d(c_in, c_atten, kernel_size=1)
 
     def forward(self, input: torch.Tensor):
-        #  The code will be open source soonn)
+        b, c, h, w = input.size()
+        feat = self.conv_feat(input).view(b, self.c_feat, -1)  # feature map
+        atten = self.conv_atten(input).view(b, self.c_atten, -1)  # attention map
+        atten = F.softmax(atten, dim=-1)
+        descriptors = torch.bmm(feat, atten.permute(0, 2, 1))  # (c_feat, c_atten)
 
         return descriptors
 
@@ -184,20 +200,22 @@ class IFM(nn.Module):
         self.beta = nn.Parameter(torch.ones(1), requires_grad=True)
 
     def forward(self, input_en, input_de, global_descripitors):
-        #  The code will be open source soon
+        feat_global = self.sdm(global_descripitors, input_de)
+        feat_local = self.lrm(input_en, input_de, feat_global)
+        feat_local = self.gamma * feat_local + input_en
+        # add fusion
         return self.conv_fusion(self.conv(input_de) + self.alpha * feat_global + self.beta * feat_local)
 
 
 class GraphInference(nn.Module):
     def __init__(self, dim, loop, bknum, thr1):
         super(GraphInference, self).__init__()
-        self.thr1 = thr1  # 阈值
-        self.bknum = bknum  #块数量
-        self.loop = loop  #循环次数
+        self.thr1 = thr1       # threshold
+        self.bknum = bknum     # number of blocks
+        self.loop = loop       # cycle times
         self.gcn1 = AdGatedEdgeConv(dim, dim)
 
         self.bn1 = BatchNorm(dim)
-
         self.relu = nn.ReLU()
         self.mlpCA1 = torch.nn.Sequential(torch.nn.Linear(dim, dim),
                                           torch.nn.ReLU(),
@@ -205,7 +223,21 @@ class GraphInference(nn.Module):
         self.lineFu = torch.nn.Linear(dim, dim)
 
     def forward(self, x):  # [B, C, node_num]
-        #  The code will be open source soon
+        B, C, node_num = x.size()
+        bndnum = int(node_num / (self.bknum * self.bknum)) 
+        x = F.normalize(x, p=2, dim=1)
+        x_t = x.permute(0, 2, 1).contiguous()   # x_t is [B, node_num, C]
+        adj = (torch.matmul(x_t, x))   #[B, node_num, node_num]
+        # Graph Convolution Operations
+        graph_data1, edge_index1, edge_attr1, B, graph_batch1 = Generate_edges_globally(adj, bndnum, self.thr1, B, x_t, node_num, self.bknum) 
+
+        y1 = self.relu(self.bn1(self.gcn1(graph_data1, edge_index1, edge_attr1)) + graph_data1)
+        w1 = torch.sigmoid(self.mlpCA1(global_max_pool(y1, graph_batch1)))
+        W1 = w1[graph_batch1]
+        y = self.lineFu(W1 * y1)
+        node_num_batch, C_new = y.size()
+        output = graph_batch_re_trans(y, B, node_num_batch,
+                                      C_new)  # trans from [node_num_batch, C_new] to [B, C_new, node_num]
         return output  # [B, C_new, node_num]
 
 
@@ -243,27 +275,67 @@ class GraphProjection(nn.Module):
         return soft_ass  # B node_num n
 
     def forward(self, x):
-       #  The code will be open source soon
+        B, C, H, W = x.size()
+        self.h = math.floor(H / self.bnum)
+        self.w = math.floor(W / self.bnum)
+        self.n = self.h * self.w
+        if self.normalize_input:
+            x = F.normalize(x, p=2, dim=1)
+        sigma = torch.sigmoid(self.sigma)
+        soft_assign = self.gen_soft_assign(x, sigma)
+        eps = 1e-9
+        nodes = torch.zeros([B, self.node_num, C], dtype=x.dtype, layout=x.layout, device=x.device)
+        for node_id in range(self.node_num):
+            block_id = math.floor(node_id / self.bnod)
+            h_sta = math.floor(block_id / self.bnum) * self.h
+            w_sta = block_id % (self.bnum) * self.w
+            h_end = h_sta + self.h
+            w_end = w_sta + self.w
+            tmp = x.view(B, C, H, W)[:, :, h_sta:h_end, w_sta: w_end]
+            tmp = tmp.reshape(B, C, -1).permute(0, 2, 1).contiguous()
+            residual = (tmp - self.anchor[node_id, :]).div(sigma[node_id, :])
+            nodes[:, node_id, :] = residual.mul(soft_assign[:, node_id, :].unsqueeze(2)).sum(dim=1) / (
+                        soft_assign[:, node_id, :].sum(dim=1).unsqueeze(1) + eps)
+        nodes = F.normalize(nodes, p=2, dim=2)
+        nodes = nodes.view(B, -1).contiguous()  # B X (Node_num X C)
+        nodes = F.normalize(nodes, p=2, dim=1)
         return nodes.view(B, self.node_num, C).permute(0, 2, 1).contiguous(), soft_assign
+        # B*C*node，B * node * n
 
 
 class GraphProcess(nn.Module):
     def __init__(self, bnum, bnod, dim, loop, thr1):
         super(GraphProcess, self).__init__()
         self.loop = loop
-        self.bnum = bnum  # 块的数量
-        self.bnod = bnod  # 每个块中的节点数量
+        self.bnum = bnum  
+        self.bnod = bnod  
         self.dim = dim
-        self.node_num = bnum * bnum * bnod   # 节点数量
+        self.node_num = bnum * bnum * bnod   # nodes
         self.proj = GraphProjection(self.bnum, self.bnod, self.dim)
         self.gconv = GraphInference(self.dim, self.loop, self.bnum, thr1)
 
     def GraphReprojection(self, Q, Z):   # Q:(B, N, C), Z:(B, C, N)
-        #  The code will be open source soon
-        return res  # 投影特征
+        self.B, self.Dim, _ = Z.size()
+        res = torch.zeros([self.B, self.Dim, self.H, self.W], device=Z.device, dtype=Z.dtype, layout=Z.layout)
+        for node_id in range(self.node_num):
+            block_id = math.floor(node_id / self.bnod)
+            h_sta = math.floor(block_id / self.bnum) * self.h  
+            w_sta = block_id % (self.bnum) * self.w    
+            h_end = h_sta + self.h  
+            w_end = w_sta + self.w  
+            res[:, :, h_sta:h_end, w_sta:w_end] += torch.matmul(Z[:, :, node_id].unsqueeze(2),
+                                                                Q[:, node_id, :].unsqueeze(1)).view(self.B, self.Dim,
+                                                                                                    self.h, self.w)
+        return res  
 
-    def forward(self, x):  #
-        #  The code will be open source soon
+    def forward(self, x): 
+        _, _, self.H, self.W = x.size()
+        self.h = math.floor(self.H / self.bnum)  
+        self.w = math.floor(self.W / self.bnum)
+        g, Q = self.proj(x)  
+        g = self.gconv(g)
+        res = self.GraphReprojection(Q, g) + x
+        res.to(x.device)
         return res
 
 
@@ -277,7 +349,8 @@ class GCNModule(nn.Module):
         self.upsample2 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
     def forward(self, x3):
-        #  The code will be open source soon
+        x = self.conv(x3)
+        x = self.gcnlayer(x) + x
         return x
 
 
@@ -331,7 +404,6 @@ class SFANet(nn.Module):
         super(SFANet, self).__init__()
         #Backbone model
         self.bkbone = res2net50_v1b_26w_4s(pretrained=True)
-        # self.bkbone = resnet50_XMZ(pretrained=1)
 
         self.conv1 = BasicConv2d(64, 16, kernel_size=1, stride=1)
         self.conv2 = BasicConv2d(256, 32, kernel_size=1, stride=1)
@@ -339,10 +411,6 @@ class SFANet(nn.Module):
         self.conv4 = BasicConv2d(1024, 128, kernel_size=1, stride=1)
         self.conv5 = BasicConv2d(2048, 256, kernel_size=1, stride=1)
 
-        # self.sem_d5 = SEM(512, 512, 512 // 4)
-        # self.ifm_d4 = IFM(256, 512)
-        # self.sem_d4 = SEM(256, 256, 256 // 4)
-        # self.ifm_d3 = IFM(128, 256)
 
         self.sem_d5 = SEM(256, 256, 256 // 4)
         self.ifm_d4 = IFM(128, 256)
@@ -356,13 +424,10 @@ class SFANet(nn.Module):
 
         self.decoder_rgb = decoder()
 
-        # self.upsample16 = nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True)
-        # self.upsample8 = nn.Upsample(scale_factor=8, mode='bilinear', align_corners=True)
         self.upsample4 = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
         self.upsample2 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
         self.sigmoid = nn.Sigmoid()
-
         self.S1 = nn.Conv2d(16, 1, 3, stride=1, padding=1)
         self.S2 = nn.Conv2d(32, 1, 3, stride=1, padding=1)
         self.S3 = nn.Conv2d(64, 1, 3, stride=1, padding=1)
@@ -379,8 +444,6 @@ class SFANet(nn.Module):
         x3 = self.bkbone.layer2(x2)
         x4 = self.bkbone.layer3(x3)
         x5 = self.bkbone.layer4(x4)
-
-        # print(x1.shape, x2.shape,x3.shape, x4.shape, x5.shape)
 
         x1 = self.conv1(x1)
         x2 = self.conv2(x2)
@@ -400,7 +463,7 @@ class SFANet(nn.Module):
         s3 = self.gcnlayer(s3)
         s2, edge2 = self.urm_d2(x2)
         s1, edge1 = self.urm_d1(x1)
-      
+
         s1, s2, s3 = self.decoder_rgb(s3, s2, s1)
 
         s1 = self.upsample2(s1)
